@@ -1,0 +1,71 @@
+#!/bin/bash
+
+
+if [ -z "$1" ] || [ ! -f "$2" ]; then
+	echo "usage: $0 <interface> /path/to/etc/conf.d/net"
+	exit 1
+fi
+if=$1
+. $2
+
+# Function calculates number of bit in a netmask
+#
+mask2cidr() {
+    nbits=0
+    IFS=.
+    for dec in $1 ; do
+        case $dec in
+            255) let nbits+=8;;
+            254) let nbits+=7;;
+            252) let nbits+=6;;
+            248) let nbits+=5;;
+            240) let nbits+=4;;
+            224) let nbits+=3;;
+            192) let nbits+=2;;
+            128) let nbits+=1;;
+            0);;
+            *) echo "Error: $dec is not recognised"; exit 1
+        esac
+    done
+    echo "$nbits"
+}
+
+
+echo "[Match]"
+echo "Name=$if"
+echo
+CONFIG=dns_servers_${if}
+eval "array=(\"\${${CONFIG}[@]}\" )"
+echo "[Network]"
+for d in "${array[@]}"; do
+	echo "DNS=$d"
+done
+CONFIG=config_${if}
+eval "array=(\"\${${CONFIG}[@]}\" )"
+for d in "${array[@]}"; do
+	if echo $d | grep -q netmask; then
+		MASK=$(echo $d | awk '{ print $3 }')
+		IP=$(echo $d | awk '{ print $1 }')
+		numbits=$(mask2cidr $MASK)
+		echo "Address=$IP/$numbits"
+	else 
+		echo "Address=$d"
+	fi
+done
+CONFIG=routes_${if}
+eval "array=(\"\${${CONFIG}[@]}\" )"
+for d in "${array[@]}"; do
+	echo
+	echo "[Route]"
+	if echo $d | grep -q netmask; then
+		MASK=$(echo $d | awk '{ print $3 }')
+		IP=$(echo $d | awk '{ print $1 }')
+		GW=$(echo $d | awk '{ print $5 }')
+		numbits=$(mask2cidr $MASK)
+		echo "Destination=$IP/$numbits"
+		echo "Gateway=$GW"
+	else 
+		GW=$(echo $d | awk '{ print $3 }')
+		echo "Gateway=$GW"
+	fi
+done
