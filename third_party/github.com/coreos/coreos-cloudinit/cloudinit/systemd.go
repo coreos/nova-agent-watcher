@@ -9,7 +9,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/coreos/go-systemd/dbus"
+	"github.com/coreos/nova-agent-watcher/third_party/github.com/coreos/go-systemd/dbus"
 )
 
 type Unit struct {
