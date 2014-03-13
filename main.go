@@ -1,11 +1,11 @@
 package main
 
 import (
-	"code.google.com/p/go.exp/fsnotify"
 	"flag"
 	"fmt"
-	"github.com/coreos/coreos-cloudinit/cloudinit"
-	"github.com/coreos/go-systemd/dbus"
+	"github.com/coreos/nova-agent-watcher/third_party/code.google.com/p/go.exp/fsnotify"
+	"github.com/coreos/nova-agent-watcher/third_party/github.com/coreos/coreos-cloudinit/cloudinit"
+	"github.com/coreos/nova-agent-watcher/third_party/github.com/coreos/go-systemd/dbus"
 	"io/ioutil"
 	"log"
 	"os"
