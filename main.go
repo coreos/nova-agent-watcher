@@ -80,6 +80,10 @@ func runEvent(full_path string, watch_dir string, scripts_dir string) error {
 		log.Println("error getting joining path for:", full_path)
 		return err
 	}
+	if _, ok := fileHandlers[func_key]; !ok {
+		log.Println("no handler found for", func_key)
+		return nil
+	}
 	config, err := fileHandlers[func_key](full_path, scripts_dir)
 	if err != nil {
 		log.Println("error in handler", err)
