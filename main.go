@@ -12,10 +12,12 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"strings"
 )
 
 var fileHandlers = map[string]func(string, string) (*cloudinit.CloudConfig, error){
-	"/etc/conf.d/net": handleNet,
+	"/etc/conf.d/net":            handleNet,
+	"/root/.ssh/authorized_keys": handleSSH,
 }
 
 func main() {
@@ -155,6 +157,23 @@ func handleNet(file_name string, scripts_dir string) (*cloudinit.CloudConfig, er
 		}
 		config.Coreos.Units = append(config.Coreos.Units, u)
 		configured_eths[eth] = true
+	}
+	return &config, nil
+}
+func handleSSH(file_name string, scripts_dir string) (*cloudinit.CloudConfig, error) {
+	contents, err := ioutil.ReadFile(file_name)
+	if err != nil {
+		log.Println("error: could not read file", err)
+		return nil, err
+	}
+	ssh_keys := string(contents)
+
+	re := regexp.MustCompile("ssh-.+\n")
+	keys := re.FindAllString(ssh_keys, -1)
+	config := cloudinit.CloudConfig{}
+	for _, key := range keys {
+		key = strings.TrimRight(key, "\n")
+		config.SSH_Authorized_Keys = append(config.SSH_Authorized_Keys, key)
 	}
 	return &config, nil
 }
