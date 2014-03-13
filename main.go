@@ -14,12 +14,13 @@ import (
 	"regexp"
 )
 
-var fileHandlers = map[string]func(string) (*cloudinit.CloudConfig, error){
+var fileHandlers = map[string]func(string, string) (*cloudinit.CloudConfig, error){
 	"/etc/conf.d/net": handleNet,
 }
 
 func main() {
 	var watch_dir = flag.String("watch-dir", ".", "Path to watch")
+	var scripts_dir = flag.String("scripts-dir", "./scripts", "Path for supporting shell scripts")
 	flag.Parse()
 	watcher, err := fsnotify.NewWatcher()
 	if err != nil {
@@ -37,7 +38,7 @@ func main() {
 				if !ev.IsCreate() {
 					continue
 				}
-				err := runEvent(ev.Name, watch_dir)
+				err := runEvent(ev.Name, *watch_dir, *scripts_dir)
 				if err != nil {
 					log.Println("error handling event:", err)
 				}
@@ -55,7 +56,7 @@ func main() {
 		if err != nil {
 			log.Println("warn: error setting up watcher (dir doesn't exist?):", err)
 		}
-		err = runEvent(full_path, watch_dir)
+		err = runEvent(full_path, *watch_dir, *scripts_dir)
 		if err != nil {
 			log.Println("warn: initalizing event failed:", err)
 		}
@@ -65,11 +66,11 @@ func main() {
 	watcher.Close()
 }
 
-func runEvent(full_path string, watch_dir *string) error {
+func runEvent(full_path string, watch_dir string, scripts_dir string) error {
 	if _, err := os.Stat(full_path); err != nil {
 		return err
 	}
-	file_name, err := filepath.Rel(*watch_dir, full_path)
+	file_name, err := filepath.Rel(watch_dir, full_path)
 	if err != nil {
 		log.Println("error getting relative path for:", full_path)
 		return err
@@ -79,7 +80,7 @@ func runEvent(full_path string, watch_dir *string) error {
 		log.Println("error getting joining path for:", full_path)
 		return err
 	}
-	config, err := fileHandlers[func_key](full_path)
+	config, err := fileHandlers[func_key](full_path, scripts_dir)
 	if err != nil {
 		log.Println("error in handler", err)
 		return err
@@ -116,7 +117,7 @@ func runConfig(config *cloudinit.CloudConfig) error {
 	return err
 }
 
-func handleNet(file_name string) (*cloudinit.CloudConfig, error) {
+func handleNet(file_name string, scripts_dir string) (*cloudinit.CloudConfig, error) {
 	contents, err := ioutil.ReadFile(file_name)
 	if err != nil {
 		log.Println("error: could not read file", err)
@@ -135,7 +136,9 @@ func handleNet(file_name string) (*cloudinit.CloudConfig, error) {
 		if configured_eths[eth] {
 			continue
 		}
-		cmd := exec.Command("./scripts/gentoo-to-networkd", eth, file_name)
+
+		script := filepath.Join(scripts_dir, "gentoo-to-networkd")
+		cmd := exec.Command(script, eth, file_name)
 		out, err := cmd.CombinedOutput()
 		if err != nil {
 			log.Println("error: not good output", err)
