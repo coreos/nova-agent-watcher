@@ -18,6 +18,7 @@ import (
 var fileHandlers = map[string]func(string, string) (*cloudinit.CloudConfig, error){
 	"/etc/conf.d/net":            handleNet,
 	"/root/.ssh/authorized_keys": handleSSH,
+	//	"/var/lib/heat-cfntools/cfn-userdata": handleHeatUserData,
 }
 
 func main() {
@@ -172,6 +173,15 @@ func handleSSH(file_name string, scripts_dir string) (*cloudinit.CloudConfig, er
 	keys := re.FindAllString(ssh_keys, -1)
 	config := cloudinit.CloudConfig{}
 	for _, key := range keys {
+		key = strings.TrimRight(key, "\n")
+		config.SSH_Authorized_Keys = append(config.SSH_Authorized_Keys, key)
+	}
+	// XXX cloudn't figure out how to combine these regexs. This is needed
+	// to match keys that do not end in a newline
+	re = regexp.MustCompile("ssh-.+\\z")
+	keys = re.FindAllString(ssh_keys, -1)
+	for _, key := range keys {
+		log.Println(key)
 		key = strings.TrimRight(key, "\n")
 		config.SSH_Authorized_Keys = append(config.SSH_Authorized_Keys, key)
 	}
