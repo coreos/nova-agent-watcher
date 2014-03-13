@@ -43,6 +43,10 @@ done
 CONFIG=config_${if}
 eval "array=(\"\${${CONFIG}[@]}\" )"
 for d in "${array[@]}"; do
+	# XXX skip ipv6
+	if echo $d | grep -q ":"; then
+		continue
+	fi
 	if echo $d | grep -q netmask; then
 		MASK=$(echo $d | awk '{ print $3 }')
 		IP=$(echo $d | awk '{ print $1 }')
@@ -55,12 +59,16 @@ done
 CONFIG=routes_${if}
 eval "array=(\"\${${CONFIG}[@]}\" )"
 for d in "${array[@]}"; do
-	echo
-	echo "[Route]"
+	# XXX skip ipv6
+	if echo $d | grep -q ":"; then
+		continue
+	fi
 	if echo $d | grep -q netmask; then
 		MASK=$(echo $d | awk '{ print $3 }')
 		IP=$(echo $d | awk '{ print $1 }')
 		GW=$(echo $d | awk '{ print $5 }')
+		echo
+		echo "[Route]"
 		numbits=$(mask2cidr $MASK)
 		echo "Destination=$IP/$numbits"
 		echo "Gateway=$GW"
