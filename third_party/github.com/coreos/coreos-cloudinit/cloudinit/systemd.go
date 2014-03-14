@@ -5,6 +5,7 @@ import (
 	"io/ioutil"
 	"log"
 	"os"
+	"os/exec"
 	"path"
 	"path/filepath"
 	"strings"
@@ -115,7 +116,9 @@ func RestartUnitByName(name string) error {
 		return err
 	}
 
-	_, err = conn.RestartUnit(name, "replace")
+	output, err := conn.RestartUnit(name, "replace")
+	log.Printf("Restart completed with '%s'", output)
+
 	return err
 }
 
@@ -147,4 +150,8 @@ func ExecuteScript(scriptPath string) (string, error) {
 
 	_, err = conn.StartTransientUnit(name, "replace", props...)
 	return name, err
+}
+
+func SetHostname(hostname string) error {
+	return exec.Command("hostnamectl", "set-hostname", hostname).Run()
 }
