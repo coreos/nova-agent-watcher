@@ -18,6 +18,8 @@ import (
 var fileHandlers = map[string]func(string, string) (*cloudinit.CloudConfig, error){
 	"/etc/conf.d/net":            handleNet,
 	"/root/.ssh/authorized_keys": handleSSH,
+	"/etc/shadow":                handleShadow,
+	"/etc/conf.d/hostname":       handleHostname,
 	//	"/var/lib/heat-cfntools/cfn-userdata": handleHeatUserData,
 }
 
@@ -174,7 +176,7 @@ func handleSSH(file_name string, scripts_dir string) (*cloudinit.CloudConfig, er
 	config := cloudinit.CloudConfig{}
 	for _, key := range keys {
 		key = strings.TrimRight(key, "\n")
-		config.SSH_Authorized_Keys = append(config.SSH_Authorized_Keys, key)
+		config.SSHAuthorizedKeys = append(config.SSHAuthorizedKeys, key)
 	}
 	// XXX cloudn't figure out how to combine these regexs. This is needed
 	// to match keys that do not end in a newline
@@ -183,7 +185,55 @@ func handleSSH(file_name string, scripts_dir string) (*cloudinit.CloudConfig, er
 	for _, key := range keys {
 		log.Println(key)
 		key = strings.TrimRight(key, "\n")
-		config.SSH_Authorized_Keys = append(config.SSH_Authorized_Keys, key)
+		config.SSHAuthorizedKeys = append(config.SSHAuthorizedKeys, key)
 	}
+	return &config, nil
+}
+func handleShadow(file_name string, scripts_dir string) (*cloudinit.CloudConfig, error) {
+	config := cloudinit.CloudConfig{}
+	contents, err := ioutil.ReadFile(file_name)
+	if err != nil {
+		log.Println("error: could not read file", err)
+		return nil, err
+	}
+	passwd := string(contents)
+
+	// root:$1$NyBnu0Gl$GBoj9u6lx3R8nyqHuxPwz/:15839:0:::::
+	re := regexp.MustCompile("root:([^:]+):.+\n")
+	keys := re.FindStringSubmatch(passwd)
+	if len(keys) == 2 {
+		passwd_hash := keys[1]
+
+		// set the password for both users
+		root := cloudinit.User{
+			Name:         "root",
+			PasswordHash: passwd_hash,
+		}
+		config.Users = append(config.Users, root)
+		core := cloudinit.User{
+			Name:         "core",
+			PasswordHash: passwd_hash,
+		}
+		config.Users = append(config.Users, core)
+	}
+	return &config, nil
+}
+func handleHostname(file_name string, scripts_dir string) (*cloudinit.CloudConfig, error) {
+	config := cloudinit.CloudConfig{}
+	contents, err := ioutil.ReadFile(file_name)
+	if err != nil {
+		log.Println("error: could not read file", err)
+		return nil, err
+	}
+	hostname := string(contents)
+	// HOSTNAME="polvi-test"
+	re := regexp.MustCompile("HOSTNAME=\"(.+)\"")
+	keys := re.FindStringSubmatch(hostname)
+	if len(keys) == 2 {
+		hostname := keys[1]
+
+		config.Hostname = hostname
+	}
+
 	return &config, nil
 }
