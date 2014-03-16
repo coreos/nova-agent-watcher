@@ -1,0 +1,4 @@
+#!/bin/bash -e
+
+go test -i .
+go test -v .

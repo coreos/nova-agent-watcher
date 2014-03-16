@@ -1,11 +1,14 @@
 package main
 
 import (
+	"bytes"
+	"errors"
 	"flag"
 	"fmt"
 	"github.com/coreos/nova-agent-watcher/third_party/code.google.com/p/go.exp/fsnotify"
 	"github.com/coreos/nova-agent-watcher/third_party/github.com/coreos/coreos-cloudinit/cloudinit"
 	"github.com/coreos/nova-agent-watcher/third_party/github.com/coreos/go-systemd/dbus"
+	"io"
 	"io/ioutil"
 	"log"
 	"os"
@@ -18,6 +21,8 @@ import (
 var fileHandlers = map[string]func(string, string) (*cloudinit.CloudConfig, error){
 	"/etc/conf.d/net":            handleNet,
 	"/root/.ssh/authorized_keys": handleSSH,
+	"/etc/shadow":                handleShadow,
+	"/etc/conf.d/hostname":       handleHostname,
 	//	"/var/lib/heat-cfntools/cfn-userdata": handleHeatUserData,
 }
 
@@ -87,7 +92,12 @@ func runEvent(full_path string, watch_dir string, scripts_dir string) error {
 		log.Println("no handler found for", func_key)
 		return nil
 	}
-	config, err := fileHandlers[func_key](full_path, scripts_dir)
+	contents, err := ioutil.ReadFile(full_path)
+	if err != nil {
+		log.Println("error reading file", err)
+		return err
+	}
+	config, err := fileHandlers[func_key](string(contents), scripts_dir)
 	if err != nil {
 		log.Println("error in handler", err)
 		return err
@@ -124,13 +134,8 @@ func runConfig(config *cloudinit.CloudConfig) error {
 	return err
 }
 
-func handleNet(file_name string, scripts_dir string) (*cloudinit.CloudConfig, error) {
-	contents, err := ioutil.ReadFile(file_name)
-	if err != nil {
-		log.Println("error: could not read file", err)
-		return nil, err
-	}
-	network_str := string(contents)
+func handleNet(contents string, scripts_dir string) (*cloudinit.CloudConfig, error) {
+	network_str := contents
 
 	re := regexp.MustCompile("eth[\\d]+")
 	eths := re.FindAllString(network_str, -1)
@@ -145,45 +150,130 @@ func handleNet(file_name string, scripts_dir string) (*cloudinit.CloudConfig, er
 		}
 
 		script := filepath.Join(scripts_dir, "gentoo-to-networkd")
-		cmd := exec.Command(script, eth, file_name)
-		out, err := cmd.CombinedOutput()
+		c1 := exec.Command("echo", contents)
+		c2 := exec.Command(script, eth)
+
+		r, w := io.Pipe()
+		c1.Stdout = w
+		c2.Stdin = r
+
+		var b2 bytes.Buffer
+		c2.Stdout = &b2
+		err := c1.Start()
 		if err != nil {
-			log.Println("error: not good output", err)
+			log.Println("error: echo failed", err)
+			return nil, err
+		}
+		err = c2.Start()
+		if err != nil {
+			log.Println("error: script failed", err)
+			return nil, err
+		}
+		err = c1.Wait()
+		if err != nil {
+			log.Println("error: echo wait failed", err)
+			return nil, err
+		}
+		err = w.Close()
+		if err != nil {
+			log.Println("error: closing pipe failed", err)
+			return nil, err
+		}
+		err = c2.Wait()
+		if err != nil {
+			log.Println("error: script wait failed", err)
 			return nil, err
 		}
 		unit := fmt.Sprintf("50-%s.network", eth)
+		out := b2.String()
 		u := cloudinit.Unit{
 			Name:    unit,
-			Content: string(out),
+			Content: out,
 		}
 		config.Coreos.Units = append(config.Coreos.Units, u)
 		configured_eths[eth] = true
 	}
 	return &config, nil
 }
-func handleSSH(file_name string, scripts_dir string) (*cloudinit.CloudConfig, error) {
-	contents, err := ioutil.ReadFile(file_name)
-	if err != nil {
-		log.Println("error: could not read file", err)
-		return nil, err
+
+// setKey core and root users authorized_keys to the passed key
+func setKey(config *cloudinit.CloudConfig, key string) *cloudinit.CloudConfig {
+	config.SSHAuthorizedKeys = append(config.SSHAuthorizedKeys, key)
+	// set the password for both users
+	if len(config.Users) == 0 {
+		root := cloudinit.User{
+			Name: "root",
+		}
+		root.SSHAuthorizedKeys = append(root.SSHAuthorizedKeys, key)
+		config.Users = append(config.Users, root)
+	} else {
+		config.Users[0].SSHAuthorizedKeys = append(config.Users[0].SSHAuthorizedKeys, key)
 	}
-	ssh_keys := string(contents)
+	return config
+}
+
+// handleSSH takes an authorized_key file and returns a cloud-config
+func handleSSH(contents string, scripts_dir string) (*cloudinit.CloudConfig, error) {
+	config := cloudinit.CloudConfig{}
+
+	ssh_keys := contents
 
 	re := regexp.MustCompile("ssh-.+\n")
 	keys := re.FindAllString(ssh_keys, -1)
-	config := cloudinit.CloudConfig{}
 	for _, key := range keys {
 		key = strings.TrimRight(key, "\n")
-		config.SSH_Authorized_Keys = append(config.SSH_Authorized_Keys, key)
+		setKey(&config, key)
 	}
-	// XXX cloudn't figure out how to combine these regexs. This is needed
-	// to match keys that do not end in a newline
+
 	re = regexp.MustCompile("ssh-.+\\z")
 	keys = re.FindAllString(ssh_keys, -1)
 	for _, key := range keys {
-		log.Println(key)
-		key = strings.TrimRight(key, "\n")
-		config.SSH_Authorized_Keys = append(config.SSH_Authorized_Keys, key)
+		setKey(&config, key)
 	}
+
+	return &config, nil
+}
+
+// handleShadow takes a /etc/shadow style file and returns a cloud-config
+func handleShadow(contents string, scripts_dir string) (*cloudinit.CloudConfig, error) {
+	config := cloudinit.CloudConfig{}
+	passwd := contents
+
+	// root:$1$NyBnu0Gl$GBoj9u6lx3R8nyqHuxPwz/:15839:0:::::
+	re := regexp.MustCompile("root:([^:]+):.+\n")
+	keys := re.FindStringSubmatch(passwd)
+	if len(keys) == 2 {
+		passwd_hash := keys[1]
+
+		// set the password for both users
+		root := cloudinit.User{
+			Name:         "root",
+			PasswordHash: passwd_hash,
+		}
+		config.Users = append(config.Users, root)
+		core := cloudinit.User{
+			Name:         "core",
+			PasswordHash: passwd_hash,
+		}
+		config.Users = append(config.Users, core)
+	} else {
+		return nil, errors.New("unable to parse password hash from shadow")
+	}
+	return &config, nil
+}
+
+// handlHostname takes a gentoo style /etc/conf.d/hostname and returns a cloud-config
+func handleHostname(contents string, scripts_dir string) (*cloudinit.CloudConfig, error) {
+	config := cloudinit.CloudConfig{}
+	hostname := contents
+	// HOSTNAME="polvi-test"
+	re := regexp.MustCompile("HOSTNAME=\"(.+)\"")
+	keys := re.FindStringSubmatch(hostname)
+	if len(keys) == 2 {
+		hostname := keys[1]
+
+		config.Hostname = hostname
+	}
+
 	return &config, nil
 }
