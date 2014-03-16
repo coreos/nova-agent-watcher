@@ -1,12 +1,12 @@
 #!/bin/bash
 
+source /dev/stdin
 
-if [ -z "$1" ] || [ ! -f "$2" ]; then
-	echo "usage: $0 <interface> /path/to/etc/conf.d/net"
+if [ -z "$1" ]; then
+	echo "usage: cat /path/to/etc/conf.d/ne | $0 <interface>"
 	exit 1
 fi
 if=$1
-. $2
 
 # Function calculates number of bit in a netmask
 #
