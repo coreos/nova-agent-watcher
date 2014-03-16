@@ -3,7 +3,7 @@
 source /dev/stdin
 
 if [ -z "$1" ]; then
-	echo "usage: cat /path/to/etc/conf.d/ne | $0 <interface>"
+	echo "usage: cat /path/to/etc/conf.d/net | $0 <interface>"
 	exit 1
 fi
 if=$1

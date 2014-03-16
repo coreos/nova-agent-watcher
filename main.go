@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"errors"
 	"flag"
 	"fmt"
 	"github.com/coreos/nova-agent-watcher/third_party/code.google.com/p/go.exp/fsnotify"
@@ -149,7 +150,6 @@ func handleNet(contents string, scripts_dir string) (*cloudinit.CloudConfig, err
 		}
 
 		script := filepath.Join(scripts_dir, "gentoo-to-networkd")
-		// XXX
 		c1 := exec.Command("echo", contents)
 		c2 := exec.Command(script, eth)
 
@@ -196,7 +196,7 @@ func handleNet(contents string, scripts_dir string) (*cloudinit.CloudConfig, err
 	return &config, nil
 }
 
-// config.SSHAuthorizedKeys sets the "core" user, the other sets the root
+// setKey core and root users authorized_keys to the passed key
 func setKey(config *cloudinit.CloudConfig, key string) *cloudinit.CloudConfig {
 	config.SSHAuthorizedKeys = append(config.SSHAuthorizedKeys, key)
 	// set the password for both users
@@ -211,6 +211,8 @@ func setKey(config *cloudinit.CloudConfig, key string) *cloudinit.CloudConfig {
 	}
 	return config
 }
+
+// handleSSH takes an authorized_key file and returns a cloud-config
 func handleSSH(contents string, scripts_dir string) (*cloudinit.CloudConfig, error) {
 	config := cloudinit.CloudConfig{}
 
@@ -231,6 +233,8 @@ func handleSSH(contents string, scripts_dir string) (*cloudinit.CloudConfig, err
 
 	return &config, nil
 }
+
+// handleShadow takes a /etc/shadow style file and returns a cloud-config
 func handleShadow(contents string, scripts_dir string) (*cloudinit.CloudConfig, error) {
 	config := cloudinit.CloudConfig{}
 	passwd := contents
@@ -252,9 +256,13 @@ func handleShadow(contents string, scripts_dir string) (*cloudinit.CloudConfig, 
 			PasswordHash: passwd_hash,
 		}
 		config.Users = append(config.Users, core)
+	} else {
+		return nil, errors.New("unable to parse password hash from shadow")
 	}
 	return &config, nil
 }
+
+// handlHostname takes a gentoo style /etc/conf.d/hostname and returns a cloud-config
 func handleHostname(contents string, scripts_dir string) (*cloudinit.CloudConfig, error) {
 	config := cloudinit.CloudConfig{}
 	hostname := contents
