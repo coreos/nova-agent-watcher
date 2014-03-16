@@ -91,7 +91,7 @@ func runEvent(full_path string, watch_dir string, scripts_dir string) error {
 		log.Println("no handler found for", func_key)
 		return nil
 	}
-	contents, err := ioutil.ReadFile(file_name)
+	contents, err := ioutil.ReadFile(full_path)
 	if err != nil {
 		log.Println("error reading file", err)
 		return err
