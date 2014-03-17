@@ -91,6 +91,18 @@ dns_servers_eth0=(
 	if config.Coreos.Units[2].Name != "50-eth0.network" {
 		t.Fatalf("got %v, expected %v", config.Coreos.Units[2].Name, "50-eth0.network")
 	}
+	expected := `[Match]
+Name=eth0
+
+[Network]
+DNS=173.203.4.9
+DNS=173.203.4.8
+Address=23.253.212.214/24
+Gateway=23.253.212.1
+`
+	if config.Coreos.Units[2].Content != expected {
+		t.Fatalf("got\t%v, expected\t%v", config.Coreos.Units[2].Content, expected)
+	}
 }
 func TestHostname(t *testing.T) {
 	hostname := `# Set to the hostname of this machine
