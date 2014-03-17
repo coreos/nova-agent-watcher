@@ -8,7 +8,6 @@ import (
 	"github.com/coreos/nova-agent-watcher/third_party/code.google.com/p/go.exp/fsnotify"
 	"github.com/coreos/nova-agent-watcher/third_party/github.com/coreos/coreos-cloudinit/cloudinit"
 	"github.com/coreos/nova-agent-watcher/third_party/github.com/coreos/go-systemd/dbus"
-	"io"
 	"io/ioutil"
 	"log"
 	"os"
@@ -150,42 +149,25 @@ func handleNet(contents string, scripts_dir string) (*cloudinit.CloudConfig, err
 		}
 
 		script := filepath.Join(scripts_dir, "gentoo-to-networkd")
-		c1 := exec.Command("echo", contents)
-		c2 := exec.Command(script, eth)
+		c := exec.Command(script, eth)
 
-		r, w := io.Pipe()
-		c1.Stdout = w
-		c2.Stdin = r
+		c.Stdin = bytes.NewBufferString(contents)
 
-		var b2 bytes.Buffer
-		c2.Stdout = &b2
-		err := c1.Start()
-		if err != nil {
-			log.Println("error: echo failed", err)
-			return nil, err
-		}
-		err = c2.Start()
+		var b bytes.Buffer
+		c.Stdout = &b
+
+		err := c.Start()
 		if err != nil {
 			log.Println("error: script failed", err)
 			return nil, err
 		}
-		err = c1.Wait()
-		if err != nil {
-			log.Println("error: echo wait failed", err)
-			return nil, err
-		}
-		err = w.Close()
-		if err != nil {
-			log.Println("error: closing pipe failed", err)
-			return nil, err
-		}
-		err = c2.Wait()
+		err = c.Wait()
 		if err != nil {
 			log.Println("error: script wait failed", err)
 			return nil, err
 		}
 		unit := fmt.Sprintf("50-%s.network", eth)
-		out := b2.String()
+		out := b.String()
 		u := cloudinit.Unit{
 			Name:    unit,
 			Content: out,
