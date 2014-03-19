@@ -5,9 +5,6 @@ import (
 	"errors"
 	"flag"
 	"fmt"
-	"github.com/coreos/nova-agent-watcher/third_party/code.google.com/p/go.exp/fsnotify"
-	"github.com/coreos/nova-agent-watcher/third_party/github.com/coreos/coreos-cloudinit/cloudinit"
-	"github.com/coreos/nova-agent-watcher/third_party/github.com/coreos/go-systemd/dbus"
 	"io"
 	"io/ioutil"
 	"log"
@@ -16,9 +13,14 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+
+	"github.com/coreos/nova-agent-watcher/third_party/code.google.com/p/go.exp/fsnotify"
+	"github.com/coreos/nova-agent-watcher/third_party/github.com/coreos/go-systemd/dbus"
+	"github.com/coreos/nova-agent-watcher/third_party/github.com/coreos/coreos-cloudinit/initialize"
+	"github.com/coreos/nova-agent-watcher/third_party/github.com/coreos/coreos-cloudinit/system"
 )
 
-var fileHandlers = map[string]func(string, string) (*cloudinit.CloudConfig, error){
+var fileHandlers = map[string]func(string, string) (*initialize.CloudConfig, error){
 	"/etc/conf.d/net":            handleNet,
 	"/root/.ssh/authorized_keys": handleSSH,
 	"/etc/shadow":                handleShadow,
@@ -106,7 +108,7 @@ func runEvent(full_path string, watch_dir string, scripts_dir string) error {
 	return err
 }
 
-func runConfig(config *cloudinit.CloudConfig) error {
+func runConfig(config *initialize.CloudConfig) error {
 	f, err := ioutil.TempFile("", "rackspace-cloudinit-")
 	if err != nil {
 		return err
@@ -134,13 +136,13 @@ func runConfig(config *cloudinit.CloudConfig) error {
 	return err
 }
 
-func handleNet(contents string, scripts_dir string) (*cloudinit.CloudConfig, error) {
+func handleNet(contents string, scripts_dir string) (*initialize.CloudConfig, error) {
 	network_str := contents
 
 	re := regexp.MustCompile("eth[\\d]+")
 	eths := re.FindAllString(network_str, -1)
 
-	config := cloudinit.CloudConfig{}
+	config := initialize.CloudConfig{}
 
 	configured_eths := map[string]bool{}
 	for _, eth := range eths {
@@ -186,7 +188,7 @@ func handleNet(contents string, scripts_dir string) (*cloudinit.CloudConfig, err
 		}
 		unit := fmt.Sprintf("50-%s.network", eth)
 		out := b2.String()
-		u := cloudinit.Unit{
+		u := system.Unit{
 			Name:    unit,
 			Content: out,
 		}
@@ -197,11 +199,11 @@ func handleNet(contents string, scripts_dir string) (*cloudinit.CloudConfig, err
 }
 
 // setKey core and root users authorized_keys to the passed key
-func setKey(config *cloudinit.CloudConfig, key string) *cloudinit.CloudConfig {
+func setKey(config *initialize.CloudConfig, key string) *initialize.CloudConfig {
 	config.SSHAuthorizedKeys = append(config.SSHAuthorizedKeys, key)
 	// set the password for both users
 	if len(config.Users) == 0 {
-		root := cloudinit.User{
+		root := system.User{
 			Name: "root",
 		}
 		root.SSHAuthorizedKeys = append(root.SSHAuthorizedKeys, key)
@@ -213,8 +215,8 @@ func setKey(config *cloudinit.CloudConfig, key string) *cloudinit.CloudConfig {
 }
 
 // handleSSH takes an authorized_key file and returns a cloud-config
-func handleSSH(contents string, scripts_dir string) (*cloudinit.CloudConfig, error) {
-	config := cloudinit.CloudConfig{}
+func handleSSH(contents string, scripts_dir string) (*initialize.CloudConfig, error) {
+	config := initialize.CloudConfig{}
 
 	ssh_keys := contents
 
@@ -235,8 +237,8 @@ func handleSSH(contents string, scripts_dir string) (*cloudinit.CloudConfig, err
 }
 
 // handleShadow takes a /etc/shadow style file and returns a cloud-config
-func handleShadow(contents string, scripts_dir string) (*cloudinit.CloudConfig, error) {
-	config := cloudinit.CloudConfig{}
+func handleShadow(contents string, scripts_dir string) (*initialize.CloudConfig, error) {
+	config := initialize.CloudConfig{}
 	passwd := contents
 
 	// root:$1$NyBnu0Gl$GBoj9u6lx3R8nyqHuxPwz/:15839:0:::::
@@ -246,12 +248,12 @@ func handleShadow(contents string, scripts_dir string) (*cloudinit.CloudConfig, 
 		passwd_hash := keys[1]
 
 		// set the password for both users
-		root := cloudinit.User{
+		root := system.User{
 			Name:         "root",
 			PasswordHash: passwd_hash,
 		}
 		config.Users = append(config.Users, root)
-		core := cloudinit.User{
+		core := system.User{
 			Name:         "core",
 			PasswordHash: passwd_hash,
 		}
@@ -263,8 +265,8 @@ func handleShadow(contents string, scripts_dir string) (*cloudinit.CloudConfig, 
 }
 
 // handlHostname takes a gentoo style /etc/conf.d/hostname and returns a cloud-config
-func handleHostname(contents string, scripts_dir string) (*cloudinit.CloudConfig, error) {
-	config := cloudinit.CloudConfig{}
+func handleHostname(contents string, scripts_dir string) (*initialize.CloudConfig, error) {
+	config := initialize.CloudConfig{}
 	hostname := contents
 	// HOSTNAME="polvi-test"
 	re := regexp.MustCompile("HOSTNAME=\"(.+)\"")
