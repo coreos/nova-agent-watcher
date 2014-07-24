@@ -1,11 +1,13 @@
-#!/bin/sh -e
+#!/bin/bash -e
 
-if [ ! -h src/github.com/coreos/nova-agent-watcher ]; then
-	mkdir -p src/github.com/coreos/
-	ln -s ../../.. src/github.com/coreos/nova-agent-watcher
+export GOPATH=${PWD}/Godeps/_workspace
+export GOBIN=${PWD}/bin
+
+if [ ! -h $GOPATH/src/github.com/coreos/nova-agent-watcher ]; then
+    mkdir -p $GOPATH/src/github.com/coreos/
+    ln -s ../../../../../ $GOPATH/src/github.com/coreos/nova-agent-watcher
 fi
 
-export GOBIN=${PWD}/bin
-export GOPATH=${PWD}
+eval $(go env)
 
-go build -o bin/nova-agent-watcher github.com/coreos/nova-agent-watcher
+go install github.com/coreos/nova-agent-watcher
