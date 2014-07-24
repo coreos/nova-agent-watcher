@@ -13,134 +13,140 @@ import (
 	"github.com/coreos/nova-agent-watcher/Godeps/_workspace/src/github.com/coreos/coreos-cloudinit/third_party/github.com/coreos/go-systemd/dbus"
 )
 
+func NewUnitManager(root string) UnitManager {
+	return &systemd{root}
+}
+
+type systemd struct {
+	root string
+}
+
 // fakeMachineID is placed on non-usr CoreOS images and should
 // never be used as a true MachineID
 const fakeMachineID = "42000000000000000000000000000042"
 
-type Unit struct {
-	Name    string
-	Runtime bool
-	Content string
-}
-
-func (u *Unit) Type() string {
-	ext := filepath.Ext(u.Name)
-	return strings.TrimLeft(ext, ".")
-}
-
-func (u *Unit) Group() (group string) {
-	t := u.Type()
-	if t == "network" || t == "netdev" || t == "link" {
-		group = "network"
-	} else {
-		group = "system"
-	}
-	return
-}
-
-type Script []byte
-
-func PlaceUnit(u *Unit, root string) (string, error) {
-	dir := "etc"
-	if u.Runtime {
-		dir = "run"
-	}
-
-	dst := path.Join(root, dir, "systemd", u.Group())
-	if _, err := os.Stat(dst); os.IsNotExist(err) {
-		if err := os.MkdirAll(dst, os.FileMode(0755)); err != nil {
-			return "", err
+// PlaceUnit writes a unit file at the provided destination, creating
+// parent directories as necessary.
+func (s *systemd) PlaceUnit(u *Unit, dst string) error {
+	dir := filepath.Dir(dst)
+	if _, err := os.Stat(dir); os.IsNotExist(err) {
+		if err := os.MkdirAll(dir, os.FileMode(0755)); err != nil {
+			return err
 		}
 	}
 
-	dst = path.Join(dst, u.Name)
-
 	file := File{
-		Path:               dst,
+		Path:               filepath.Base(dst),
 		Content:            u.Content,
 		RawFilePermissions: "0644",
 	}
 
-	err := WriteFile(&file)
-	if err != nil {
-		return "", err
-	}
-
-	return dst, nil
-}
-
-func EnableUnitFile(file string, runtime bool) error {
-	conn, err := dbus.New()
+	_, err := WriteFile(&file, dir)
 	if err != nil {
 		return err
-	}
-
-	files := []string{file}
-	_, _, err = conn.EnableUnitFiles(files, runtime, true)
-	return err
-}
-
-func separateNetworkUnits(units []Unit) ([]Unit, []Unit) {
-	networkUnits := make([]Unit, 0)
-	nonNetworkUnits := make([]Unit, 0)
-	for _, unit := range units {
-		if unit.Group() == "network" {
-			networkUnits = append(networkUnits, unit)
-		} else {
-			nonNetworkUnits = append(nonNetworkUnits, unit)
-		}
-	}
-	return networkUnits, nonNetworkUnits
-}
-
-func StartUnits(units []Unit) error {
-	networkUnits, nonNetworkUnits := separateNetworkUnits(units)
-	if len(networkUnits) > 0 {
-		if err := RestartUnitByName("systemd-networkd.service"); err != nil {
-			return err
-		}
-	}
-
-	for _, unit := range nonNetworkUnits {
-		if err := RestartUnitByName(unit.Name); err != nil {
-			return err
-		}
 	}
 
 	return nil
 }
 
-func DaemonReload() error {
+func (s *systemd) EnableUnitFile(unit string, runtime bool) error {
 	conn, err := dbus.New()
 	if err != nil {
 		return err
 	}
 
-	_, err = conn.Reload()
+	units := []string{unit}
+	_, _, err = conn.EnableUnitFiles(units, runtime, true)
 	return err
 }
 
-func RestartUnitByName(name string) error {
-	log.Printf("Restarting unit %s", name)
+func (s *systemd) RunUnitCommand(command, unit string) (string, error) {
 	conn, err := dbus.New()
 	if err != nil {
-		return err
+		return "", err
 	}
 
-	output, err := conn.RestartUnit(name, "replace")
-	log.Printf("Restart completed with '%s'", output)
+	var fn func(string, string) (string, error)
+	switch command {
+	case "start":
+		fn = conn.StartUnit
+	case "stop":
+		fn = conn.StopUnit
+	case "restart":
+		fn = conn.RestartUnit
+	case "reload":
+		fn = conn.ReloadUnit
+	case "try-restart":
+		fn = conn.TryRestartUnit
+	case "reload-or-restart":
+		fn = conn.ReloadOrRestartUnit
+	case "reload-or-try-restart":
+		fn = conn.ReloadOrTryRestartUnit
+	default:
+		return "", fmt.Errorf("Unsupported systemd command %q", command)
+	}
 
-	return err
+	return fn(unit, "replace")
 }
 
-func StartUnitByName(name string) error {
+func (s *systemd) DaemonReload() error {
 	conn, err := dbus.New()
 	if err != nil {
 		return err
 	}
 
-	_, err = conn.StartUnit(name, "replace")
-	return err
+	return conn.Reload()
+}
+
+// MaskUnit masks the given Unit by symlinking its unit file to
+// /dev/null, analogous to `systemctl mask`.
+// N.B.: Unlike `systemctl mask`, this function will *remove any existing unit
+// file at the location*, to ensure that the mask will succeed.
+func (s *systemd) MaskUnit(unit *Unit) error {
+	masked := unit.Destination(s.root)
+	if _, err := os.Stat(masked); os.IsNotExist(err) {
+		if err := os.MkdirAll(path.Dir(masked), os.FileMode(0755)); err != nil {
+			return err
+		}
+	} else if err := os.Remove(masked); err != nil {
+		return err
+	}
+	return os.Symlink("/dev/null", masked)
+}
+
+// UnmaskUnit is analogous to systemd's unit_file_unmask. If the file
+// associated with the given Unit is empty or appears to be a symlink to
+// /dev/null, it is removed.
+func (s *systemd) UnmaskUnit(unit *Unit) error {
+	masked := unit.Destination(s.root)
+	ne, err := nullOrEmpty(masked)
+	if os.IsNotExist(err) {
+		return nil
+	} else if err != nil {
+		return err
+	}
+	if !ne {
+		log.Printf("%s is not null or empty, refusing to unmask", masked)
+		return nil
+	}
+	return os.Remove(masked)
+}
+
+// nullOrEmpty checks whether a given path appears to be an empty regular file
+// or a symlink to /dev/null
+func nullOrEmpty(path string) (bool, error) {
+	fi, err := os.Stat(path)
+	if err != nil {
+		return false, err
+	}
+	m := fi.Mode()
+	if m.IsRegular() && fi.Size() <= 0 {
+		return true, nil
+	}
+	if m&os.ModeCharDevice > 0 {
+		return true, nil
+	}
+	return false, nil
 }
 
 func ExecuteScript(scriptPath string) (string, error) {

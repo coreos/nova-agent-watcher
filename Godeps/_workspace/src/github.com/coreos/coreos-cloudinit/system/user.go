@@ -13,6 +13,7 @@ type User struct {
 	PasswordHash        string   `yaml:"passwd"`
 	SSHAuthorizedKeys   []string `yaml:"ssh-authorized-keys"`
 	SSHImportGithubUser string   `yaml:"coreos-ssh-import-github"`
+	SSHImportURL        string   `yaml:"coreos-ssh-import-url"`
 	GECOS               string   `yaml:"gecos"`
 	Homedir             string   `yaml:"homedir"`
 	NoCreateHome        bool     `yaml:"no-create-home"`
@@ -33,6 +34,8 @@ func CreateUser(u *User) error {
 
 	if u.PasswordHash != "" {
 		args = append(args, "--password", u.PasswordHash)
+	} else {
+		args = append(args, "--password", "*")
 	}
 
 	if u.GECOS != "" {
@@ -50,7 +53,7 @@ func CreateUser(u *User) error {
 	}
 
 	if u.PrimaryGroup != "" {
-		args = append(args, "--primary-group", u.PrimaryGroup)
+		args = append(args, "--gid", u.PrimaryGroup)
 	}
 
 	if len(u.Groups) > 0 {
