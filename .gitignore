@@ -25,3 +25,4 @@ _testmain.go
 *.swo
 
 bin/
+Godeps/_workspace/src/github.com/coreos/nova-agent-watcher

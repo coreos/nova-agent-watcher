@@ -1,0 +1,44 @@
+{
+	"ImportPath": "github.com/coreos/nova-agent-watcher",
+	"GoVersion": "go1.2.2",
+	"Deps": [
+		{
+			"ImportPath": "code.google.com/p/go.exp/fsnotify",
+			"Comment": "null-73",
+			"Rev": "19114a3ee7d5473b597c550033e20841b35a4435"
+		},
+		{
+			"ImportPath": "github.com/coreos/coreos-cloudinit/initialize",
+			"Comment": "v0.2.0-3-g48f733f",
+			"Rev": "48f733f44837d99f4b498f523b9b14a518e1d95c"
+		},
+		{
+			"ImportPath": "github.com/coreos/coreos-cloudinit/system",
+			"Comment": "v0.2.0-3-g48f733f",
+			"Rev": "48f733f44837d99f4b498f523b9b14a518e1d95c"
+		},
+		{
+			"ImportPath": "github.com/coreos/coreos-cloudinit/third_party/github.com/coreos/go-systemd/dbus",
+			"Comment": "v0.2.0-3-g48f733f",
+			"Rev": "48f733f44837d99f4b498f523b9b14a518e1d95c"
+		},
+		{
+			"ImportPath": "github.com/coreos/coreos-cloudinit/third_party/github.com/guelfey/go.dbus",
+			"Comment": "v0.2.0-3-g48f733f",
+			"Rev": "48f733f44837d99f4b498f523b9b14a518e1d95c"
+		},
+		{
+			"ImportPath": "github.com/coreos/coreos-cloudinit/third_party/launchpad.net/goyaml",
+			"Comment": "v0.2.0-3-g48f733f",
+			"Rev": "48f733f44837d99f4b498f523b9b14a518e1d95c"
+		},
+		{
+			"ImportPath": "github.com/coreos/go-systemd/dbus",
+			"Rev": "57eb061b918b793c3ec3939c69a632fc4dfac8c9"
+		},
+		{
+			"ImportPath": "github.com/guelfey/go.dbus",
+			"Rev": "f6a3a2366cc39b8479cadc499d3c735fb10fbdda"
+		}
+	]
+}

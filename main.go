@@ -14,10 +14,10 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/coreos/nova-agent-watcher/third_party/code.google.com/p/go.exp/fsnotify"
-	"github.com/coreos/nova-agent-watcher/third_party/github.com/coreos/go-systemd/dbus"
-	"github.com/coreos/nova-agent-watcher/third_party/github.com/coreos/coreos-cloudinit/initialize"
-	"github.com/coreos/nova-agent-watcher/third_party/github.com/coreos/coreos-cloudinit/system"
+	"github.com/coreos/nova-agent-watcher/Godeps/_workspace/src/code.google.com/p/go.exp/fsnotify"
+	"github.com/coreos/nova-agent-watcher/Godeps/_workspace/src/github.com/coreos/go-systemd/dbus"
+	"github.com/coreos/nova-agent-watcher/Godeps/_workspace/src/github.com/coreos/coreos-cloudinit/initialize"
+	"github.com/coreos/nova-agent-watcher/Godeps/_workspace/src/github.com/coreos/coreos-cloudinit/system"
 )
 
 var fileHandlers = map[string]func(string, string) (*initialize.CloudConfig, error){

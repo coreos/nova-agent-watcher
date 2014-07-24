@@ -1,6 +1,0 @@
-#!/bin/bash -e
-
-export GOBIN=${PWD}/bin
-export GOPATH=${PWD}
-
-go build -o bin/coreos-cloudinit github.com/coreos/coreos-cloudinit
