@@ -3,10 +3,10 @@ package initialize
 import (
 	"io/ioutil"
 	"os"
-	"os/exec"
 	"path"
-	"syscall"
 	"testing"
+
+	"github.com/coreos/nova-agent-watcher/Godeps/_workspace/src/github.com/coreos/coreos-cloudinit/system"
 )
 
 func TestEtcdEnvironment(t *testing.T) {
@@ -58,39 +58,33 @@ Environment="ETCD_PEER_BIND_ADDR=127.0.0.1:7002"
 	}
 }
 
-func TestEtcdEnvironmentReplacement(t *testing.T) {
-	os.Clearenv()
-	os.Setenv("COREOS_PUBLIC_IPV4", "203.0.113.29")
-	os.Setenv("COREOS_PRIVATE_IPV4", "192.0.2.13")
-
-	cfg := make(EtcdEnvironment, 0)
-	cfg["bind-addr"] = "$public_ipv4:4001"
-	cfg["peer-bind-addr"] = "$private_ipv4:7001"
-
-	env := cfg.String()
-	expect := `[Service]
-Environment="ETCD_BIND_ADDR=203.0.113.29:4001"
-Environment="ETCD_PEER_BIND_ADDR=192.0.2.13:7001"
-`
-	if env != expect {
-		t.Errorf("Generated environment:\n%s\nExpected environment:\n%s", env, expect)
-	}
-}
-
 func TestEtcdEnvironmentWrittenToDisk(t *testing.T) {
-	ec := EtcdEnvironment{
-		"name": "node001",
-		"discovery": "http://disco.example.com/foobar",
+	ee := EtcdEnvironment{
+		"name":           "node001",
+		"discovery":      "http://disco.example.com/foobar",
 		"peer-bind-addr": "127.0.0.1:7002",
 	}
 	dir, err := ioutil.TempDir(os.TempDir(), "coreos-cloudinit-")
 	if err != nil {
 		t.Fatalf("Unable to create tempdir: %v", err)
 	}
-	defer syscall.Rmdir(dir)
+	defer os.RemoveAll(dir)
 
-	if err := WriteEtcdEnvironment(ec, dir); err != nil {
-		t.Fatalf("Processing of EtcdEnvironment failed: %v", err)
+	sd := system.NewUnitManager(dir)
+
+	uu, err := ee.Units(dir)
+	if err != nil {
+		t.Fatalf("Generating etcd unit failed: %v", err)
+	}
+	if len(uu) != 1 {
+		t.Fatalf("Expected 1 unit to be returned, got %d", len(uu))
+	}
+	u := uu[0]
+
+	dst := u.Destination(dir)
+	os.Stderr.WriteString("writing to " + dir + "\n")
+	if err := sd.PlaceUnit(&u, dst); err != nil {
+		t.Fatalf("Writing of EtcdEnvironment failed: %v", err)
 	}
 
 	fullPath := path.Join(dir, "run", "systemd", "system", "etcd.service.d", "20-cloudinit.conf")
@@ -110,8 +104,8 @@ func TestEtcdEnvironmentWrittenToDisk(t *testing.T) {
 	}
 
 	expect := `[Service]
-Environment="ETCD_NAME=node001"
 Environment="ETCD_DISCOVERY=http://disco.example.com/foobar"
+Environment="ETCD_NAME=node001"
 Environment="ETCD_PEER_BIND_ADDR=127.0.0.1:7002"
 `
 	if string(contents) != expect {
@@ -120,12 +114,14 @@ Environment="ETCD_PEER_BIND_ADDR=127.0.0.1:7002"
 }
 
 func TestEtcdEnvironmentWrittenToDiskDefaultToMachineID(t *testing.T) {
-	ec := EtcdEnvironment{}
+	ee := EtcdEnvironment{}
 	dir, err := ioutil.TempDir(os.TempDir(), "coreos-cloudinit-")
 	if err != nil {
 		t.Fatalf("Unable to create tempdir: %v", err)
 	}
-	defer syscall.Rmdir(dir)
+	defer os.RemoveAll(dir)
+
+	sd := system.NewUnitManager(dir)
 
 	os.Mkdir(path.Join(dir, "etc"), os.FileMode(0755))
 	err = ioutil.WriteFile(path.Join(dir, "etc", "machine-id"), []byte("node007"), os.FileMode(0444))
@@ -133,8 +129,19 @@ func TestEtcdEnvironmentWrittenToDiskDefaultToMachineID(t *testing.T) {
 		t.Fatalf("Failed writing out /etc/machine-id: %v", err)
 	}
 
-	if err := WriteEtcdEnvironment(ec, dir); err != nil {
-		t.Fatalf("Processing of EtcdEnvironment failed: %v", err)
+	uu, err := ee.Units(dir)
+	if err != nil {
+		t.Fatalf("Generating etcd unit failed: %v", err)
+	}
+	if len(uu) == 0 {
+		t.Fatalf("Returned empty etcd units unexpectedly")
+	}
+	u := uu[0]
+
+	dst := u.Destination(dir)
+	os.Stderr.WriteString("writing to " + dir + "\n")
+	if err := sd.PlaceUnit(&u, dst); err != nil {
+		t.Fatalf("Writing of EtcdEnvironment failed: %v", err)
 	}
 
 	fullPath := path.Join(dir, "run", "systemd", "system", "etcd.service.d", "20-cloudinit.conf")
@@ -152,7 +159,14 @@ Environment="ETCD_NAME=node007"
 	}
 }
 
-func rmdir(path string) error {
-    cmd := exec.Command("rm", "-rf", path)
-    return cmd.Run()
+func TestEtcdEnvironmentWhenNil(t *testing.T) {
+	// EtcdEnvironment will be a nil map if it wasn't in the yaml
+	var ee EtcdEnvironment
+	if ee != nil {
+		t.Fatalf("EtcdEnvironment is not nil")
+	}
+	uu, err := ee.Units("")
+	if len(uu) != 0 || err != nil {
+		t.Fatalf("Units returned value for nil input")
+	}
 }
