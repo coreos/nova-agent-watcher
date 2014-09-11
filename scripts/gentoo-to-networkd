@@ -3,8 +3,8 @@
 source /dev/stdin
 
 if [ -z "$1" ]; then
-	echo "usage: cat /path/to/etc/conf.d/net | $0 <interface>"
-	exit 1
+    echo "usage: cat /path/to/etc/conf.d/net | $0 <interface>"
+    exit 1
 fi
 if=$1
 
@@ -30,6 +30,18 @@ mask2cidr() {
     echo "$nbits"
 }
 
+route() {
+    MASK=$3
+    IP=$1
+    numbits=$(mask2cidr $MASK)
+    DEST="Destination=$IP/$numbits"
+    GW="Gateway=$5"
+    printf "[Route]\n%s\n%s" $DEST $GW
+}
+
+net_gateway() {
+    printf "Gateway=%s" $3
+}
 
 echo "[Match]"
 echo "Name=$if"
@@ -38,42 +50,36 @@ CONFIG=dns_servers_${if}
 eval "array=(\"\${${CONFIG}[@]}\" )"
 echo "[Network]"
 for d in "${array[@]}"; do
-	echo "DNS=$d"
+    echo "DNS=$d"
 done
 CONFIG=config_${if}
 eval "array=(\"\${${CONFIG}[@]}\" )"
 for d in "${array[@]}"; do
-	# XXX skip ipv6
-	if echo $d | grep -q ":"; then
-		continue
-	fi
-	if echo $d | grep -q netmask; then
-		MASK=$(echo $d | awk '{ print $3 }')
-		IP=$(echo $d | awk '{ print $1 }')
-		numbits=$(mask2cidr $MASK)
-		echo "Address=$IP/$numbits"
-	else 
-		echo "Address=$d"
-	fi
+    # XXX skip ipv6
+    if echo $d | grep -q ":"; then
+        continue
+    fi
+    if echo $d | grep -q netmask; then
+        MASK=$(echo $d | awk '{ print $3 }')
+        IP=$(echo $d | awk '{ print $1 }')
+        numbits=$(mask2cidr $MASK)
+        echo "Address=$IP/$numbits"
+    else 
+        echo "Address=$d"
+    fi
 done
 CONFIG=routes_${if}
+routes_output=""
 eval "array=(\"\${${CONFIG}[@]}\" )"
 for d in "${array[@]}"; do
-	# XXX skip ipv6
-	if echo $d | grep -q ":"; then
-		continue
-	fi
-	if echo $d | grep -q netmask; then
-		MASK=$(echo $d | awk '{ print $3 }')
-		IP=$(echo $d | awk '{ print $1 }')
-		GW=$(echo $d | awk '{ print $5 }')
-		echo
-		echo "[Route]"
-		numbits=$(mask2cidr $MASK)
-		echo "Destination=$IP/$numbits"
-		echo "Gateway=$GW"
-	else 
-		GW=$(echo $d | awk '{ print $3 }')
-		echo "Gateway=$GW"
-	fi
+    # XXX skip ipv6
+    if echo $d | grep -q ":"; then
+        continue
+    fi
+    if echo $d | grep -q netmask; then
+        printf -v routes_output "%s\n\n%s" "$routes_output" "$(route $d)"
+    else
+        printf -v routes_output "%s%s" "$(net_gateway $d)" "$routes_output"
+    fi
 done
+echo "$routes_output"
