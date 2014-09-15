@@ -30,7 +30,7 @@ mask2cidr() {
     echo "$nbits"
 }
 
-route() {
+unicast_route() {
     MASK=$3
     IP=$1
     numbits=$(mask2cidr $MASK)
@@ -39,8 +39,8 @@ route() {
     printf "[Route]\n%s\n%s" $DEST $GW
 }
 
-net_gateway() {
-    printf "Gateway=%s" $3
+default_route() {
+    printf "[Route]\nGateway=%s" $3
 }
 
 echo "[Match]"
@@ -69,7 +69,6 @@ for d in "${array[@]}"; do
     fi
 done
 CONFIG=routes_${if}
-routes_output=""
 eval "array=(\"\${${CONFIG}[@]}\" )"
 for d in "${array[@]}"; do
     # XXX skip ipv6
@@ -77,9 +76,9 @@ for d in "${array[@]}"; do
         continue
     fi
     if echo $d | grep -q netmask; then
-        printf -v routes_output "%s\n\n%s" "$routes_output" "$(route $d)"
+        route="$(unicast_route $d)"
     else
-        printf -v routes_output "%s%s" "$(net_gateway $d)" "$routes_output"
+        route="$(default_route $d)"
     fi
+    printf "\n%s\n" "$route"
 done
-echo "$routes_output"
