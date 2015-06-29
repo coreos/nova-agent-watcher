@@ -1,12 +1,7 @@
 {
 	"ImportPath": "github.com/coreos/nova-agent-watcher",
-	"GoVersion": "go1.2.2",
+	"GoVersion": "go1.3.1",
 	"Deps": [
-		{
-			"ImportPath": "code.google.com/p/go.exp/fsnotify",
-			"Comment": "null-73",
-			"Rev": "19114a3ee7d5473b597c550033e20841b35a4435"
-		},
 		{
 			"ImportPath": "github.com/coreos/coreos-cloudinit/initialize",
 			"Comment": "v0.9.0-5-g7fc67c2",
@@ -54,6 +49,11 @@
 		{
 			"ImportPath": "github.com/guelfey/go.dbus",
 			"Rev": "f6a3a2366cc39b8479cadc499d3c735fb10fbdda"
+		},
+		{
+			"ImportPath": "gopkg.in/fsnotify.v1",
+			"Comment": "v1.0.4",
+			"Rev": "ca50e738d35a862c379baf8fffbc3bfd080b3cff"
 		}
 	]
 }

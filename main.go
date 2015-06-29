@@ -14,10 +14,10 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/coreos/nova-agent-watcher/Godeps/_workspace/src/code.google.com/p/go.exp/fsnotify"
-	"github.com/coreos/nova-agent-watcher/Godeps/_workspace/src/github.com/coreos/go-systemd/dbus"
 	"github.com/coreos/nova-agent-watcher/Godeps/_workspace/src/github.com/coreos/coreos-cloudinit/initialize"
 	"github.com/coreos/nova-agent-watcher/Godeps/_workspace/src/github.com/coreos/coreos-cloudinit/system"
+	"github.com/coreos/nova-agent-watcher/Godeps/_workspace/src/github.com/coreos/go-systemd/dbus"
+	"github.com/coreos/nova-agent-watcher/Godeps/_workspace/src/gopkg.in/fsnotify.v1"
 )
 
 var fileHandlers = map[string]func(string, string) (*initialize.CloudConfig, error){
@@ -43,16 +43,16 @@ func main() {
 	go func() {
 		for {
 			select {
-			case ev := <-watcher.Event:
+			case ev := <-watcher.Events:
 				log.Println("got event", ev)
-				if !ev.IsCreate() {
+				if !(ev.Op&fsnotify.Create == fsnotify.Create) {
 					continue
 				}
 				err := runEvent(ev.Name, *watch_dir, *scripts_dir)
 				if err != nil {
 					log.Println("error handling event:", err)
 				}
-			case err := <-watcher.Error:
+			case err := <-watcher.Errors:
 				log.Println("error:", err)
 				done <- true
 			}
@@ -62,7 +62,7 @@ func main() {
 	for k, _ := range fileHandlers {
 		full_path := filepath.Join(*watch_dir, k)
 		dir_path := filepath.Dir(full_path)
-		err = watcher.Watch(dir_path)
+		err = watcher.Add(dir_path)
 		if err != nil {
 			log.Println("warn: error setting up watcher (dir doesn't exist?):", err)
 		}
